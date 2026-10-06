@@ -4,11 +4,10 @@
 namespace rsa {
 
 BigInt rsa_encrypt(const BigInt& m, const RsaKeys& k) {
-    if (m < 0 || m >= k.n) throw std::invalid_argument("rsa_encrypt: m вне диапазона [0, N)");
+    if (m < 0 || m >= k.n) throw std::invalid_argument("rsa_encrypt: m вне диапазона");
     return mod_pow(m, k.e, k.n);
 }
 
-// Алгоритм Гарнера (CRT)
 BigInt rsa_decrypt_crt(const BigInt& c, const RsaKeys& k) {
     const BigInt m1 = mod_pow(c % k.p, k.dp, k.p);
     const BigInt m2 = mod_pow(c % k.q, k.dq, k.q);
@@ -16,10 +15,6 @@ BigInt rsa_decrypt_crt(const BigInt& c, const RsaKeys& k) {
     if (diff < 0) diff += k.p;
     const BigInt h = (k.qinv * diff) % k.p;
     return m2 + h * k.q;
-}
-
-BigInt rsa_decrypt_plain(const BigInt& c, const RsaKeys& k) {
-    return mod_pow(c, k.d, k.n);
 }
 
 }

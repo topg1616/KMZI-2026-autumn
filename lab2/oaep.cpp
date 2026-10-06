@@ -3,7 +3,6 @@
 
 namespace rsa {
 
-// SHA-512 (FIPS 180-4)
 namespace {
 
 const std::uint64_t SHA_K[80] = {
@@ -42,8 +41,7 @@ void sha512_block(std::uint64_t h[8], const std::uint8_t* p) {
         const std::uint64_t s1 = rotr64(w[i-2], 19) ^ rotr64(w[i-2], 61) ^ (w[i-2] >> 6);
         w[i] = w[i-16] + s0 + w[i-7] + s1;
     }
-    std::uint64_t a = h[0], b = h[1], c = h[2], d = h[3];
-    std::uint64_t e = h[4], f = h[5], g = h[6], hh = h[7];
+    std::uint64_t a=h[0], b=h[1], c=h[2], d=h[3], e=h[4], f=h[5], g=h[6], hh=h[7];
     for (int i = 0; i < 80; ++i) {
         const std::uint64_t S1 = rotr64(e, 14) ^ rotr64(e, 18) ^ rotr64(e, 41);
         const std::uint64_t ch = (e & f) ^ (~e & g);
@@ -51,24 +49,21 @@ void sha512_block(std::uint64_t h[8], const std::uint8_t* p) {
         const std::uint64_t S0 = rotr64(a, 28) ^ rotr64(a, 34) ^ rotr64(a, 39);
         const std::uint64_t mj = (a & b) ^ (a & c) ^ (b & c);
         const std::uint64_t t2 = S0 + mj;
-        hh = g; g = f; f = e; e = d + t1;
-        d = c; c = b; b = a; a = t1 + t2;
+        hh=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
     }
-    h[0] += a; h[1] += b; h[2] += c; h[3] += d;
-    h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+    h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;
 }
 
-void mgf1(const std::uint8_t* seed, std::size_t seed_len,
-          std::uint8_t* out, std::size_t out_len) {
+void mgf1(const std::uint8_t* seed, std::size_t seed_len, std::uint8_t* out, std::size_t out_len) {
     std::array<std::uint8_t, DB_LEN + 4> buf{};
     for (std::size_t i = 0; i < seed_len; ++i) buf[i] = seed[i];
     std::uint32_t counter = 0;
     std::size_t pos = 0;
     while (pos < out_len) {
-        buf[seed_len + 0] = static_cast<std::uint8_t>(counter >> 24);
-        buf[seed_len + 1] = static_cast<std::uint8_t>(counter >> 16);
-        buf[seed_len + 2] = static_cast<std::uint8_t>(counter >> 8);
-        buf[seed_len + 3] = static_cast<std::uint8_t>(counter);
+        buf[seed_len+0] = static_cast<std::uint8_t>(counter >> 24);
+        buf[seed_len+1] = static_cast<std::uint8_t>(counter >> 16);
+        buf[seed_len+2] = static_cast<std::uint8_t>(counter >> 8);
+        buf[seed_len+3] = static_cast<std::uint8_t>(counter);
         std::uint8_t h[64];
         sha512(buf.data(), seed_len + 4, h);
         for (std::size_t i = 0; i < 64 && pos < out_len; ++i, ++pos) out[pos] = h[i];
@@ -78,7 +73,6 @@ void mgf1(const std::uint8_t* seed, std::size_t seed_len,
 
 void lhash_empty(std::uint8_t out[64]) { sha512(nullptr, 0, out); }
 
-// Constant-time примитивы
 inline std::uint8_t ct_neq0(std::uint8_t x) {
     const std::uint32_t v = x;
     return static_cast<std::uint8_t>(((v | (0u - v)) >> 31) & 1u);
@@ -104,95 +98,75 @@ void sha512(const std::uint8_t* in, std::size_t len, std::uint8_t out[64]) {
     std::size_t total = len + 1;
     while (total % 128 != 112) ++total;
     const std::uint64_t bit_len = static_cast<std::uint64_t>(len) * 8;
-    for (int i = 0; i < 8; ++i) pad[total + i] = static_cast<std::uint8_t>(bit_len >> (56 - i * 8));
+    for (int i = 0; i < 8; ++i) pad[total+i] = static_cast<std::uint8_t>(bit_len >> (56-i*8));
     total += 16;
     for (std::size_t off = 0; off < total; off += 128) sha512_block(h, pad.data() + off);
     for (int i = 0; i < 8; ++i)
-        for (int j = 0; j < 8; ++j) out[i * 8 + j] = static_cast<std::uint8_t>(h[i] >> (56 - j * 8));
+        for (int j = 0; j < 8; ++j) out[i*8+j] = static_cast<std::uint8_t>(h[i] >> (56-j*8));
 }
 
-// OAEP: упаковка
 EncodedBlock oaep_encode(const Message& m, const std::uint8_t seed[H_LEN]) {
     if (m.len > MAX_MSG) throw std::invalid_argument("oaep_encode: сообщение длиннее max");
-
     std::uint8_t lHash[H_LEN];
     lhash_empty(lHash);
-
-    std::array<std::uint8_t, DB_LEN> db{};               // DB = lHash || PS || 0x01 || M
+    std::array<std::uint8_t, DB_LEN> db{};
     for (std::size_t i = 0; i < H_LEN; ++i) db[i] = lHash[i];
-    const std::size_t ps_len = MAX_MSG - m.len;          // PS — нули
+    const std::size_t ps_len = MAX_MSG - m.len;
     db[H_LEN + ps_len] = 0x01;
     for (std::size_t i = 0; i < m.len; ++i) db[H_LEN + ps_len + 1 + i] = m.data[i];
-
     std::array<std::uint8_t, DB_LEN> dbMask{};
     mgf1(seed, H_LEN, dbMask.data(), DB_LEN);
     std::array<std::uint8_t, DB_LEN> maskedDB{};
-    for (std::size_t i = 0; i < DB_LEN; ++i)
-        maskedDB[i] = static_cast<std::uint8_t>(db[i] ^ dbMask[i]);
-
+    for (std::size_t i = 0; i < DB_LEN; ++i) maskedDB[i] = static_cast<std::uint8_t>(db[i] ^ dbMask[i]);
     std::uint8_t seedMask[H_LEN];
     mgf1(maskedDB.data(), DB_LEN, seedMask, H_LEN);
-
-    EncodedBlock em{};                                   // EM = 0x00 || maskedSeed || maskedDB
+    EncodedBlock em{};
     em.data[0] = 0x00;
-    for (std::size_t i = 0; i < H_LEN; ++i)
-        em.data[1 + i] = static_cast<std::uint8_t>(seed[i] ^ seedMask[i]);
-    for (std::size_t i = 0; i < DB_LEN; ++i) em.data[1 + H_LEN + i] = maskedDB[i];
+    for (std::size_t i = 0; i < H_LEN; ++i) em.data[1+i] = static_cast<std::uint8_t>(seed[i] ^ seedMask[i]);
+    for (std::size_t i = 0; i < DB_LEN; ++i) em.data[1+H_LEN+i] = maskedDB[i];
     return em;
 }
 
-// OAEP: деинкапсуляция (Constant-time)
 DecodeResult oaep_decode(const EncodedBlock& em) {
     DecodeResult res{};
-
     const std::uint8_t* maskedSeed = em.data.data() + 1;
-    const std::uint8_t* maskedDB   = em.data.data() + 1 + H_LEN;
-
+    const std::uint8_t* maskedDB = em.data.data() + 1 + H_LEN;
     std::uint8_t seedMask[H_LEN];
     mgf1(maskedDB, DB_LEN, seedMask, H_LEN);
     std::array<std::uint8_t, H_LEN> seed{};
-    for (std::size_t i = 0; i < H_LEN; ++i)
-        seed[i] = static_cast<std::uint8_t>(maskedSeed[i] ^ seedMask[i]);
-
+    for (std::size_t i = 0; i < H_LEN; ++i) seed[i] = static_cast<std::uint8_t>(maskedSeed[i] ^ seedMask[i]);
     std::array<std::uint8_t, DB_LEN> dbMask{};
     mgf1(seed.data(), H_LEN, dbMask.data(), DB_LEN);
     std::array<std::uint8_t, DB_LEN> db{};
-    for (std::size_t i = 0; i < DB_LEN; ++i)
-        db[i] = static_cast<std::uint8_t>(maskedDB[i] ^ dbMask[i]);
+    for (std::size_t i = 0; i < DB_LEN; ++i) db[i] = static_cast<std::uint8_t>(maskedDB[i] ^ dbMask[i]);
 
-    // Аккумулятор ошибок: все проверки выполняются до конца, без раннего выхода
-    std::uint8_t bad = ct_neq0(em.data[0]);              // первый байт обязан быть 0x00
+    std::uint8_t bad = ct_neq0(em.data[0]);
     std::uint8_t lHash[H_LEN];
     lhash_empty(lHash);
-    for (std::size_t i = 0; i < H_LEN; ++i)
-        bad = static_cast<std::uint8_t>(bad | static_cast<std::uint8_t>(db[i] ^ lHash[i]));
+    for (std::size_t i = 0; i < H_LEN; ++i) bad = static_cast<std::uint8_t>(bad | static_cast<std::uint8_t>(db[i] ^ lHash[i]));
 
-    // безусловный поиск разделителя 0x01 (цикл всегда полной длины)
     std::uint8_t found = 0;
     std::uint16_t idx = 0;
     for (std::size_t i = H_LEN; i < DB_LEN; ++i) {
         const std::uint8_t is_one = ct_eq(db[i], 0x01);
-        const std::uint8_t take   = static_cast<std::uint8_t>(is_one & static_cast<std::uint8_t>(found ^ 1));
+        const std::uint8_t take = static_cast<std::uint8_t>(is_one & static_cast<std::uint8_t>(found ^ 1));
         const std::uint16_t tmask = static_cast<std::uint16_t>(0u - take);
         idx = static_cast<std::uint16_t>((static_cast<std::uint16_t>(i) & tmask) | (idx & ~tmask));
         found = static_cast<std::uint8_t>(found | is_one);
     }
     bad = static_cast<std::uint8_t>(bad | static_cast<std::uint8_t>(found ^ 1));
 
-    // Constant-time извлечение сообщения: цикл фиксированной длины, выбор по маске
     const std::size_t start = static_cast<std::size_t>(idx) + 1;
     for (std::size_t j = 0; j < MAX_MSG; ++j) {
-        const std::int64_t src  = static_cast<std::int64_t>(start) + static_cast<std::int64_t>(j);
+        const std::int64_t src = static_cast<std::int64_t>(start) + static_cast<std::int64_t>(j);
         const std::int64_t diff = static_cast<std::int64_t>(DB_LEN) - 1 - src;
         const std::uint8_t in_range = static_cast<std::uint8_t>((diff >> 63) ^ 1);
         const std::uint64_t m64 = 0ULL - static_cast<std::uint64_t>(in_range);
         const std::size_t s2 = static_cast<std::size_t>(
-            (static_cast<std::uint64_t>(src) & m64) |
-            (static_cast<std::uint64_t>(DB_LEN - 1) & ~m64));
+            (static_cast<std::uint64_t>(src) & m64) | (static_cast<std::uint64_t>(DB_LEN-1) & ~m64));
         res.msg.data[j] = static_cast<std::uint8_t>(db[s2] & ct_mask(in_range));
     }
     res.msg.len = (DB_LEN - start) * static_cast<std::size_t>(found);
-
     res.ok = (bad == 0);
     return res;
 }
